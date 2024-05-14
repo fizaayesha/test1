@@ -1,81 +1,99 @@
-const fs = require('fs');
-const path = require('path');
-const readline = require('readline');
+const fs = require("fs");
+const path = require("path");
 
-// Log levels
-const LogLevel = {
-    INFO: 'info',
-    ERROR: 'error',
-    SUCCESS: 'success'
-};
+// Define API configurations with names and log file names
+const apiConfigurations = [
+  { name: "api1", logFile: "log1.log" },
+  { name: "api2", logFile: "log2.log" },
+  { name: "api3", logFile: "log3.log" },
+  { name: "api4", logFile: "log4.log" },
+  { name: "api5", logFile: "log5.log" },
+  { name: "api6", logFile: "log6.log" },
+  { name: "api7", logFile: "log7.log" },
+  { name: "api8", logFile: "log8.log" },
+  { name: "api9", logFile: "log9.log" },
+];
 
-// Log Ingestor class
-class LogIngestor {
-    constructor() {
-        this.logFiles = {};
-        this.initializeLoggers();
-    }
+class Logger {
+  constructor(apiName, logFile) {
+    this.apiName = apiName;
+    this.logFile = logFile;
+    this.logStream = fs.createWriteStream(logFile, { flags: "a" });
+  }
 
-    initializeLoggers() {
-        this.initializeLogger('api1', 'log1.log');
-        this.initializeLogger('api2', 'log2.log');
-    }
+  log(level, logString) {
+    const logData = {
+      level,
+      log_string: logString,
+      timestamp: new Date().toISOString().slice(0, -1) + "Z",
+      metadata: { source: this.logFile },
+    };
+    this.logStream.write(JSON.stringify(logData) + "\n");
+  }
 
-    initializeLogger(apiName, logFileName) {
-        const logFilePath = path.join(__dirname, logFileName);
-        this.logFiles[apiName] = fs.createWriteStream(logFilePath, { flags: 'a' });
-    }
-
-    logMessage(apiName, level, logString) {
-        if (this.logFiles[apiName]) {
-            const logEntry = {
-                level,
-                log_string: logString,
-                timestamp: new Date().toISOString(),
-                metadata: { source: apiName }
-            };
-            this.logFiles[apiName].write(JSON.stringify(logEntry) + '\n');
-        } else {
-            console.error(`Logger '${apiName}' not initialized!`);
-        }
-    }
-
-    closeLogFiles() {
-        for (const apiName in this.logFiles) {
-            this.logFiles[apiName].end();
-        }
-    }
+  close() {
+    this.logStream.end();
+  }
 }
 
-// Function to search logs based on query parameters
-function searchLogs(queryLevel, queryString) {
-    const logFilePath = path.join(__dirname, 'log1.log'); // Example: Only searching log1.log for demonstration
-    const rl = readline.createInterface({
-        input: fs.createReadStream(logFilePath),
-        crlfDelay: Infinity
-    });
+class LogIngestor {
+  constructor() {
+    this.loggers = {};
+    this.initializeLoggers();
+  }
 
-    rl.on('line', (line) => {
-        const logEntry = JSON.parse(line);
-        const { level, log_string } = logEntry;
-
-        if (level === queryLevel && log_string.includes(queryString)) {
-            console.log(logEntry);
-        }
+  initializeLoggers() {
+    apiConfigurations.forEach((api) => {
+      const { name, logFile } = api;
+      this.loggers[name] = new Logger(name, logFile);
     });
+  }
+
+  logMessage(apiName, level, logString) {
+    const logger = this.loggers[apiName];
+    if (logger) {
+      logger.log(level, logString);
+    } else {
+      console.error(`Logger '${apiName}' not found!`);
+    }
+  }
+
+  closeAllLoggers() {
+    Object.values(this.loggers).forEach((logger) => logger.close());
+  }
 }
 
 // Usage example
-const logger = new LogIngestor();
+const logIngestor = new LogIngestor();
 
-// Log messages
-logger.logMessage('api1', LogLevel.INFO, 'Processing started');
-logger.logMessage('api2', LogLevel.ERROR, 'Failed to connect to database');
+const apiMessages = [
+  { api: "api1", level: "info", message: "Processing started" },
+  { api: "api2", level: "error", message: "Failed to connect to database" },
+  { api: "api3", level: "info", message: "Processing started" },
+  { api: "api4", level: "error", message: "Failed to connect to database" },
+  { api: "api5", level: "info", message: "Processing started" },
+  { api: "api6", level: "error", message: "Failed to connect to database" },
+  { api: "api7", level: "info", message: "Processing started" },
+  { api: "api8", level: "error", message: "Failed to connect to database" },
+  { api: "api9", level: "info", message: "Processing started" },
+];
 
-// Close log files when done
-process.on('exit', () => {
-    logger.closeLogFiles();
+// Iterate over the array and log messages dynamically
+apiMessages.forEach(({ api, level, message }) => {
+  logIngestor.logMessage(api, level, message);
 });
 
-// Example usage: Search for error logs containing 'Failed to connect'
-searchLogs(LogLevel.ERROR, 'Failed to connect');
+// Ensure log streams are closed properly
+process.on("exit", () => {
+  logIngestor.closeAllLoggers();
+});
+
+process.on("SIGINT", () => {
+  logIngestor.closeAllLoggers();
+  process.exit();
+});
+
+process.on("SIGTERM", () => {
+  logIngestor.closeAllLoggers();
+  process.exit();
+});
